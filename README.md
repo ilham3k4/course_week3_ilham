@@ -197,3 +197,148 @@ NPM has [several commands](https://docs.npmjs.com/cli/v6/commands) at its dispos
 - `npm install` - installs given module(s) from remote registries or local sources
 - `npm test` - runs the `test` script in your package.json
 - `npm uninstall` - will uninstall a give package
+
+# CLIs
+A CLI, or command line interface is a program desgined to start and complete one off tasks. Like git or npm. Node.js is a perfect runtime to create a CLI that will run on any machine that has Node.js isntalled.
+### Creating a CLI
+Creating a CLI in Node.js just takes a extra step or two because they are really just an ordinary Node.js app wrapped behind a bin command. For this exercise, we'll create a CLI that opens a random reddit post in our browser. To start, we'll create a new folder and make it a package with npm init.
+
+Once inside that folder, create a file reddit.mjs:
+```
+// reddit.mjs
+#! /usr/bin/env node
+
+console.log('hello from your CLI')
+```
+Next we need to tell Node.js what the name of our CLI is so when can actually use it in our terminal. Just have to add a section to our package.json:
+```
+"bin": {
+  "reddit": "./reddit.mjs"
+}
+```
+Once installed, this package will have it's bin command installed into your machine's bin folder allowing us to use the `reddit` command. Lastly, we must install our own package locally so we can test out the CLI. We could just execute the file with the node runtime, but we want to see the CLI actually work.
+
+> npm install -g
+
+We can simply instll with no args which tells npm to install the current director. The `-g` flag means we want to globally install this package vs in a local node_modules. You should now be able to run `reddit` and see your log print.
+
+### Packages in our Pacakge
+> npm install open node-fetch yargs --save
+
+We'll install just these three packages.
+- `open` - will open our browser with a URL
+- `node-fetch` - is a fetch client that we can use to hit the reddit API
+- `yargs` - will allow us to process any flags or arguments passed to the CLI
+
+So to put it all together
+```
+#! /usr/bin/env node
+// import our packages
+import open from 'open'
+import fetch from 'node-fetch'
+import yargs from 'yargs'
+
+// parse env vars
+const { argv } = yargs(process.argv)
+// init fetch to reddit api
+const res = await fetch('https://www.reddit.com/.json')
+const data = await res.json()
+const randomIndex = Math.floor(Math.random() * data.data.children.length)
+// get radom post from reddit api response of all posts on front page
+const post = data.data.children[randomIndex]
+
+// log if --print flag is passed
+if (argv.print) {
+  console.log(`
+    Title: ${post.data.title}\n
+    Link: ${post.data.permalink}
+  `)
+} else {
+  // open in browser if not
+  open(`https://reddit.com${post.data.permalink}`)
+}
+```
+# Servers
+Node.js has access to OS level functionality, like networking tools. This allows us to build very capable servers. Mixed with the fact that Node.js is single threaded and runs an even loop for async tasks, Node.js is widely used for API's that need to respond fast and don't require heavy CPU intensive work.
+
+### The hard way
+Node.js ships with the `http` module. This module is an abstraction around OS level networking tools. For Node.js, the http module would be considered "low level". Let's create a simple server.
+```
+import http from 'http'
+
+const host = 'localhost'
+const port = 8000
+
+const server = http.createServer((req, res) => {
+  if (req.method === 'POST') {
+    let body = ''
+
+    req.on('data', chunk => {
+      body += chunk.toString()
+    })
+
+    req.on('end', () => {
+      if (req.headers['content-type'] === 'application/json') {
+        body = JSON.parse(body)
+      }
+
+      console.log(body)
+      res.writeHead(201)
+      res.end('ok')
+    })
+  } else {
+    res.writeHead(200)
+    res.end('hello from my server')
+  }
+
+})
+
+server.listen(port, host, () => {
+  console.log(`Server is running on http://${host}:${port}`)
+})
+```
+### Express
+There is an awesome packaged, `express`, that makes creating servers in Node.js a breeze. We're going to use it now.
+
+> npm install express body-parser morgan
+
+- `express` - a framework for building servers
+- `body-parser` - a middleware that parses incoming requests
+- `morgan` - a middleware for logging incoming requests
+
+With everything installed, we'll create a simple API for a todo app using express.
+```
+import express from 'express'
+import morgan from 'morgan'
+import bp from 'body-parser'
+
+const { urlencoded, json } = bp
+
+const db = {
+  todos: [],
+}
+
+const app = express()
+
+app.use(urlencoded({ extended: true }))
+app.use(json())
+app.use(morgan('dev'))
+
+app.get('/todo', (req, res) => {
+  res.json({ data: db.todos })
+})
+
+app.post('/todo', (req, res) => {
+  const newTodo = { complete: false, id: Date.now(), text: req.body.text }
+  db.todos.push(newTodo)
+
+  res.json({ data: newTodo })
+})
+
+app.listen(8000, () => {
+  console.log('Server on http://localhost:8000')
+})
+```
+Our todo API has two routes:
+- `GET /todo` - get all todos
+- `POST /todo` - create a new todo
